@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CyberGPT Chatbot</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      background: linear-gradient(135deg, #1a1a2e, #16213e);
+    }
+    .modal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #1a1a2e;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      display: none;
+    }
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 999;
+      display: none;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center text-white">
+  <div class="w-full max-w-4xl h-[80vh] flex flex-col bg-gray-900 rounded-lg shadow-lg">
+    <header class="flex items-center justify-between p-4 border-b border-gray-700">
+      <div class="flex items-center gap-3">
+        <img src="./logo.jpg" alt="CyberGPT Logo" class="w-12 h-12 rounded-full">
+        <h1 class="text-2xl font-bold">CyberGPT</h1>
+      </div>
+      <p class="text-sm text-gray-400">Chat with application logs</p>
+    </header>
+
+    <div id="chatWindow" class="flex-1 overflow-y-auto p-6 bg-gray-800 rounded-lg">
+      <div class="text-center text-gray-500">Start the conversation!</div>
+    </div>
+
+    <div class="p-4 bg-gray-900 border-t border-gray-700 flex flex-col sm:flex-row items-center gap-3">
+      <input 
+        type="text" 
+        id="chatInput" 
+        placeholder="Type your message..." 
+        class="flex-1 border border-gray-600 rounded-md p-3 bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" 
+        disabled>
+      <button 
+        id="sendButton" 
+        class="bg-blue-500 text-white px-6 py-3 rounded-md hover:bg-blue-600" 
+        disabled>
+        Send
+      </button>
+      <label 
+        for="fileUpload" 
+        class="bg-green-500 text-white px-6 py-3 rounded-md cursor-pointer hover:bg-green-600">
+        Upload Logs
+      </label>
+      <input 
+        type="file" 
+        id="fileUpload" 
+        class="hidden">
+      <button 
+        id="viewLogsButton" 
+        class="bg-gray-500 text-white px-6 py-3 rounded-md hover:bg-gray-600 hidden">
+        View Logs
+      </button>
+    </div>
+  </div>
+
+  <div id="modal" class="modal">
+    <h2 class="text-lg font-bold mb-4">Uploaded Logs</h2>
+    <pre id="logContent" class="bg-gray-800 p-4 rounded-md text-sm text-gray-300 overflow-x-auto"></pre>
+    <button id="closeModal" class="mt-4 bg-red-500 px-4 py-2 rounded-md text-white hover:bg-red-600">Close</button>
+  </div>
+  <div id="modalOverlay" class="modal-overlay"></div>
+
+  <script>
+    let uploadedFile = null;
+
+    document.getElementById('fileUpload').addEventListener('change', (event) => {
+      uploadedFile = event.target.files[0];
+      const viewLogsButton = document.getElementById('viewLogsButton');
+      const sendButton = document.getElementById('sendButton');
+      const chatInput = document.getElementById('chatInput');
+
+      if (uploadedFile) {
+        alert(`File uploaded: ${uploadedFile.name}`);
+        viewLogsButton.classList.remove('hidden');
+        sendButton.disabled = false;
+        chatInput.disabled = false;
+      }
+    });
+
+    document.getElementById('viewLogsButton').addEventListener('click', () => {
+      const modal = document.getElementById('modal');
+      const modalOverlay = document.getElementById('modalOverlay');
+      const logContent = document.getElementById('logContent');
+
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        logContent.textContent = event.target.result;
+      };
+      reader.readAsText(uploadedFile);
+
+      modal.style.display = 'block';
+      modalOverlay.style.display = 'block';
+    });
+
+    document.getElementById('closeModal').addEventListener('click', () => {
+      document.getElementById('modal').style.display = 'none';
+      document.getElementById('modalOverlay').style.display = 'none';
+    });
+
+    document.getElementById('sendButton').addEventListener('click', () => {
+      const input = document.getElementById('chatInput');
+      const message = input.value.trim();
+      const chatWindow = document.getElementById('chatWindow');
+
+      if (message && uploadedFile) {
+        const messageElement = document.createElement('div');
+        messageElement.className = 'text-right mb-4';
+        messageElement.innerHTML = `<span class='bg-blue-500 text-white rounded-md px-4 py-2 inline-block'>${message}</span>`;
+        chatWindow.appendChild(messageElement);
+
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+
+        sendToAPI(message, uploadedFile);
+        input.value = '';
+      }
+    });
+
+    function sendToAPI(message, file) {
+      const formData = new FormData();
+      formData.append('message', message);
+      if (file) {
+        formData.append('file', file);
+      }
+
+      fetch('https://example.com/api/chat', {
+        method: 'POST',
+        body: formData
+      })
+      .then(response => response.json())
+      .then(data => {
+        console.log('Response from API:', data);
+      })
+      .catch(error => {
+        console.error('Error sending data to API:', error);
+      });
+    }
+  </script>
+</body>
+</html>
