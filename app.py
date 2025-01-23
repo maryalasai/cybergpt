@@ -47,7 +47,7 @@ async def analyze_file_and_chat(
 
     # Send the data to the model server
     PAYLOAD = {
-        "model": "llama2",
+        "model": "llama3.2",
         "prompt": prompt,
         "stream": False
     }
