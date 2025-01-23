@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CyberGPT Chatbot</title>
+  <title>SPYNshield Chatbot</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body {
@@ -20,6 +20,9 @@
       box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
       z-index: 1000;
       display: none;
+      width: 75%;
+      overflow: scroll;
+      height: 80vh;
     }
     .modal-overlay {
       position: fixed;
@@ -37,8 +40,8 @@
   <div class="w-full max-w-4xl h-[80vh] flex flex-col bg-gray-900 rounded-lg shadow-lg">
     <header class="flex items-center justify-between p-4 border-b border-gray-700">
       <div class="flex items-center gap-3">
-        <img src="./logo.jpg" alt="CyberGPT Logo" class="w-12 h-12 rounded-full">
-        <h1 class="text-2xl font-bold">CyberGPT</h1>
+        <img src="./logo.jpg" alt="SPYNshield Logo" class="w-12 h-12 rounded-full">
+        <h1 class="text-2xl font-bold">SPYNshield</h1>
       </div>
       <p class="text-sm text-gray-400">Chat with application logs</p>
     </header>
@@ -83,16 +86,15 @@
     <button id="closeModal" class="mt-4 bg-red-500 px-4 py-2 rounded-md text-white hover:bg-red-600">Close</button>
   </div>
   <div id="modalOverlay" class="modal-overlay"></div>
-
   <script>
     let uploadedFile = null;
-
+  
     document.getElementById('fileUpload').addEventListener('change', (event) => {
       uploadedFile = event.target.files[0];
       const viewLogsButton = document.getElementById('viewLogsButton');
       const sendButton = document.getElementById('sendButton');
       const chatInput = document.getElementById('chatInput');
-
+  
       if (uploadedFile) {
         alert(`File uploaded: ${uploadedFile.name}`);
         viewLogsButton.classList.remove('hidden');
@@ -100,64 +102,126 @@
         chatInput.disabled = false;
       }
     });
-
-    document.getElementById('viewLogsButton').addEventListener('click', () => {
+  
+    document.getElementById('viewLogsButton').addEventListener('click', async () => {
       const modal = document.getElementById('modal');
       const modalOverlay = document.getElementById('modalOverlay');
       const logContent = document.getElementById('logContent');
-
-      const reader = new FileReader();
-      reader.onload = function(event) {
-        logContent.textContent = event.target.result;
-      };
-      reader.readAsText(uploadedFile);
-
+  
+      if (uploadedFile) {
+        const fileName = uploadedFile.name.toLowerCase();
+  
+        if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+          // Handle Excel files
+          const reader = new FileReader();
+          reader.onload = async function (event) {
+            const data = new Uint8Array(event.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const sheetName = workbook.SheetNames[0];
+            const sheet = workbook.Sheets[sheetName];
+            const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+  
+            // Create a table to display Excel data
+            logContent.innerHTML = generateTableHTML(json);
+          };
+          reader.readAsArrayBuffer(uploadedFile);
+        } else if (fileName.endsWith('.txt')) {
+          // Handle text files
+          const reader = new FileReader();
+          reader.onload = function (event) {
+            const lines = event.target.result.split('\n').map(line => line.trim());
+            logContent.innerHTML = generateTableHTML(lines.map(line => [line]));
+          };
+          reader.readAsText(uploadedFile);
+        } else {
+          logContent.textContent = 'Unsupported file format. Please upload a .txt or .xlsx file.';
+        }
+      }
+  
       modal.style.display = 'block';
       modalOverlay.style.display = 'block';
     });
-
+  
     document.getElementById('closeModal').addEventListener('click', () => {
       document.getElementById('modal').style.display = 'none';
       document.getElementById('modalOverlay').style.display = 'none';
     });
-
+  
     document.getElementById('sendButton').addEventListener('click', () => {
       const input = document.getElementById('chatInput');
       const message = input.value.trim();
       const chatWindow = document.getElementById('chatWindow');
-
+  
       if (message && uploadedFile) {
+        // Add user message to the chat window
         const messageElement = document.createElement('div');
         messageElement.className = 'text-right mb-4';
         messageElement.innerHTML = `<span class='bg-blue-500 text-white rounded-md px-4 py-2 inline-block'>${message}</span>`;
         chatWindow.appendChild(messageElement);
-
+  
         chatWindow.scrollTop = chatWindow.scrollHeight;
-
+  
         sendToAPI(message, uploadedFile);
         input.value = '';
       }
     });
-
+  
     function sendToAPI(message, file) {
       const formData = new FormData();
       formData.append('message', message);
       if (file) {
         formData.append('file', file);
       }
-
-      fetch('https://example.com/api/chat', {
+  
+      // Show "typing" animation
+      const chatWindow = document.getElementById('chatWindow');
+      const typingMessageElement = document.createElement('div');
+      typingMessageElement.className = 'text-left mb-4';
+      typingMessageElement.innerHTML = "<span class='bg-gray-700 text-gray-300 rounded-md px-4 py-2 inline-block'>...</span>";
+      chatWindow.appendChild(typingMessageElement);
+      chatWindow.scrollTop = chatWindow.scrollHeight;
+  
+      fetch('http://localhost:8000/analyze/', {
         method: 'POST',
         body: formData
       })
-      .then(response => response.json())
-      .then(data => {
-        console.log('Response from API:', data);
-      })
-      .catch(error => {
-        console.error('Error sending data to API:', error);
+        .then(response => response.json())
+        .then(data => {
+          // Remove the "typing" indicator
+          typingMessageElement.remove();
+  
+          // Add the API response to the chat window
+          const apiMessageElement = document.createElement('div');
+          apiMessageElement.className = 'text-left mb-4';
+          apiMessageElement.innerHTML = `<pre class='bg-gray-600 text-white rounded-md px-4 py-2 inline-block' style="white-space:break-spaces">${data.response.response}</pre>`;
+          chatWindow.appendChild(apiMessageElement);
+  
+          // Scroll to the bottom
+          chatWindow.scrollTop = chatWindow.scrollHeight;
+        })
+        .catch(error => {
+          console.error('Error sending data to API:', error);
+        });
+    }
+  
+    function generateTableHTML(data) {
+      if (!Array.isArray(data) || data.length === 0) return 'No data available.';
+      const table = document.createElement('table');
+      table.className = 'w-full border-collapse border border-gray-700 text-gray-300 text-sm';
+      data.forEach(row => {
+        const tr = document.createElement('tr');
+        row.forEach(cell => {
+          const td = document.createElement('td');
+          td.className = 'border border-gray-700 p-2';
+          td.textContent = cell;
+          tr.appendChild(td);
+        });
+        table.appendChild(tr);
       });
+      return table.outerHTML;
     }
   </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  
 </body>
 </html>
