@@ -1,5 +1,8 @@
 import socket
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException,Form
+from fastapi.middleware.cors import CORSMiddleware
+
+
 import pandas as pd
 import io
 from pydantic import BaseModel
@@ -7,14 +10,23 @@ import requests # type: ignore
 
 app = FastAPI()
 
-SERVER_IP = "35.154.221.179"  # Replace with the IP address of the server
-SERVER_PORT = 11434  # Replace with the port where the model is running
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all HTTP methods
+    allow_headers=["*"],  # Allow all headers
+)
 
 class MessageRequest(BaseModel):
     message: str
+SERVER_URL = "http://localhost:11434/api/generate" 
 
 @app.post("/analyze/")
-async def analyze_file_and_chat(message: MessageRequest, file: UploadFile = File(...)):
+async def analyze_file_and_chat(
+    message: str = Form(...),  # Accept `message` as a form field
+    file: UploadFile = File(...)  # Accept `file` as a file upload
+):
     if file.content_type not in ["text/plain", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]:
         raise HTTPException(status_code=400, detail="Only text or Excel files are supported.")
 
@@ -30,38 +42,54 @@ async def analyze_file_and_chat(message: MessageRequest, file: UploadFile = File
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
 
-    # Construct input for the model
-    user_message = message.message
-    model_input = f"Data:\n{data}\n\nUser: {user_message}\nResponse:"
+    # Construct the prompt for the model
+    prompt = f"Data:\n{data}\n\nUser: {message}\nResponse:"
 
-    # Send the data to the server
+    # Send the data to the model server
+    PAYLOAD = {
+        "model": "llama2",
+        "prompt": prompt,
+        "stream": False
+    }
+
     try:
-        with socket.create_connection((SERVER_IP, SERVER_PORT), timeout=300) as sock:
-            sock.sendall(model_input.encode('utf-8'))  # Send the input to the model
-            response = sock.recv(4096)  # Receive the response (adjust buffer size if needed)
+        response = requests.post(SERVER_URL, json=PAYLOAD, headers={"Content-Type": "application/json"})
+        response.raise_for_status()  # Raise an error for HTTP status codes 4xx/5xx
 
-        return {"response": response.decode('utf-8')}
-    except Exception as e:
+        llama_response = response.json()  # Parse the JSON response
+
+        return {"response": llama_response}
+    except requests.exceptions.RequestException as e:
         raise HTTPException(status_code=500, detail=f"Error communicating with the model server: {str(e)}")
+
 
 @app.get("/status/")
 def status():
-    SERVER_URL = "http://35.154.221.179:11434/api/generate"  # Replace with your server's URL
-    
-    MESSAGE = {"message": "hi"}
+    SERVER_URL = "http://localhost:11434/api/generate"  # Replace with your server's URL
+    PAYLOAD = {
+        "model": "llama2",
+        "prompt": "capital of india?",
+        "stream": False
+    }
 
     try:
-        response = requests.post(SERVER_URL, json=MESSAGE, headers={"Content-Type": "application/json"})
+        # Make a POST request to the model server
+        response = requests.post(SERVER_URL, json=PAYLOAD, headers={"Content-Type": "application/json"})
+        response.raise_for_status()  # Raise an error for HTTP status codes 4xx/5xx
+
+        llama_response = response.json()  # Parse the JSON response
+
         return {
             "status": "Server is running.",
             "llama_connection": "Successful",
-            "llama_response": response
+            "llama_response": llama_response  # Include the server's response
         }
-    except Exception as e:
+    except requests.exceptions.RequestException as e:
         return {
             "status": "Server is running.",
             "llama_connection": f"Failed: {str(e)}",
             "llama_response": None
         }
+
 
 
